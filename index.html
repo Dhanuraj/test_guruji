@@ -22,12 +22,12 @@
     <div style="text-align:center;margin-bottom:32px;">
       <div style="font-size:52px;margin-bottom:8px;animation:namasteBow 1.2s ease infinite alternate;">🎤</div>
       <div style="font-size:28px;font-weight:900;font-family:'Outfit',sans-serif;background:linear-gradient(135deg,#c084fc,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Guru<b>Ji</b></div>
-      <div style="font-size:13px;color:#9d8ec0;margin-top:4px;font-family:'Outfit',sans-serif;">Singing Teacher Manager</div>
+      <div style="font-size:13px;color:#9d8ec0;margin-top:4px;font-family:'Outfit',sans-serif;">Sai Spandana College of Music, Bangalore</div>
     </div>
 
     <!-- Card -->
     <div style="background:#1a1530;border:1px solid #2e2850;border-radius:20px;padding:24px;">
-      <div style="font-size:16px;font-weight:800;color:#f0ebff;margin-bottom:6px;font-family:'Outfit',sans-serif;">Welcome, Guru Ji 🙏</div>
+      <div style="font-size:16px;font-weight:800;color:#f0ebff;margin-bottom:6px;font-family:'Outfit',sans-serif;">Welcome, Guru Ji</div>
       <div style="font-size:12px;color:#9d8ec0;margin-bottom:20px;font-family:'Outfit',sans-serif;">Sign in to access your students & schedule</div>
 
       <!-- Email -->
@@ -119,6 +119,7 @@
       <div class="stt b"><div class="stt-l">This Month</div><div class="stt-v b" id="dm">0</div><div class="stt-s">classes done</div></div>
     </div>
     <div class="s-hdr"><div class="s-ttl">🎵 Today's Classes</div><div class="s-act" onclick="nav('sch')">Full Schedule →</div></div>
+    <div id="nextClassBanner"></div>
     <div id="feeBanner" style="padding:0 14px"></div>
     <div id="todayClasses"></div>
     <div class="s-hdr"><div class="s-ttl">⚠ Dues</div><div class="s-act" onclick="nav('stu')">All Students →</div></div>
@@ -300,7 +301,7 @@
     <div class="set-section">
       <div class="set-sec-hdr">🎤 Teacher Info</div>
       <div class="set-row col"><div><div class="set-lbl">Teacher Name</div><div class="set-sub">Shown in WhatsApp messages</div></div><input class="set-in" id="s-teacher" placeholder="e.g. Ravi Sir" oninput="settingsChanged()"/></div>
-      <div class="set-row col"><div><div class="set-lbl">Academy / Class Name</div></div><input class="set-in" id="s-inst" placeholder="e.g. Swar Sangam Academy" oninput="settingsChanged()"/></div>
+      <div class="set-row col"><div><div class="set-lbl">Academy / Class Name</div></div><input class="set-in" id="s-inst" placeholder="e.g. Sai Spandana College of Music" oninput="settingsChanged()"/></div>
       <div class="set-row col"><div><div class="set-lbl">Your WhatsApp Number</div></div><input class="set-in" id="s-mynum" type="tel" inputmode="numeric" placeholder="9876543210" oninput="settingsChanged()"/></div>
       <div class="set-row col"><div><div class="set-lbl">Currency Symbol</div></div><input class="set-in" id="s-curr" placeholder="₹" style="max-width:80px" oninput="settingsChanged()"/></div>
     </div>
@@ -550,6 +551,7 @@
         <span>🌐</span><span id="userMenuProvider"></span>
       </div>
     </div>
+    <button onclick="closeOv('userMenuOv');syncNow()" style="width:100%;padding:12px;background:var(--acc)18;border:1px solid var(--acc)44;border-radius:12px;color:var(--acc);font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:8px;">🔄 Sync Now</button>
     <button onclick="closeOv('userMenuOv');signOut()" style="width:100%;padding:12px;background:var(--red)18;border:1px solid var(--red)44;border-radius:12px;color:var(--red);font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;">Sign Out</button>
     <button class="fcancel" onclick="closeOv('userMenuOv')">Close</button>
   </div>
@@ -581,8 +583,11 @@
     <div style="font-size:32px;font-weight:900;font-family:'Outfit',sans-serif;
       background:linear-gradient(135deg,#c084fc,#f59e0b,#c084fc);
       -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-      letter-spacing:1px;margin-bottom:8px;">Namaste Guru Ji</div>
-    <div id="namasteTeacher" style="font-size:16px;color:#9d8ec0;font-weight:600;margin-bottom:24px;font-family:'Outfit',sans-serif;"></div>
+      letter-spacing:1px;margin-bottom:4px;">Namaste</div>
+    <div style="font-size:32px;font-weight:900;font-family:'Outfit',sans-serif;
+      background:linear-gradient(135deg,#c084fc,#f59e0b,#c084fc);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+      letter-spacing:1px;margin-bottom:24px;">Guru Ji</div>
     <div style="font-size:13px;color:#5a5070;font-family:'Outfit',sans-serif;">Tap anywhere to continue</div>
   </div>
   <!-- Floating notes -->
