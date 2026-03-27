@@ -9,18 +9,21 @@ window.FB_READY = false;
 function userRef(key){ return FBDB.ref('swarpro/users/'+CURRENT_USER.uid+'/'+key); }
 
 function fbSet(key, data){
+  // Update localStorage immediately for instant local UI response
   localStorage.setItem(key, JSON.stringify(data));
   try{
     if(CURRENT_USER && FBDB){
-      // Firebase removes empty arrays — store as null explicitly so sync works
-      const val = (Array.isArray(data) && data.length===0) ? null : data;
-      userRef(key).set(val);
+      // Firebase removes empty arrays — store null so listener knows to clear
+      const val=(Array.isArray(data)&&data.length===0)?null:data;
+      userRef(key).set(val).catch(e=>console.warn('FB write:',e));
     }
-  }catch(e){ console.warn('FB write error:',e); }
+  }catch(e){ console.warn('FB write:',e); }
 }
 function fbSetRaw(key, val){
   localStorage.setItem(key, val);
-  try{ if(CURRENT_USER && FBDB) userRef(key).set(val); }catch(e){}
+  try{
+    if(CURRENT_USER && FBDB) userRef(key).set(val).catch(e=>console.warn('FB write:',e));
+  }catch(e){}
 }
 
 // ── Real-time listener reference (so we can detach on sign out) ──
@@ -39,29 +42,39 @@ function loadFromFirebase(callback){
   ref.on('value', snap=>{
     const data = snap.val();
 
-    if(data){
-      ALL_KEYS.forEach(k=>{
-        const v = data[k];
-        if(v != null){
-          localStorage.setItem(k, typeof v==='string' ? v : JSON.stringify(v));
-        } else {
-          // null = empty array was stored (Firebase removes empty nodes)
-          if(ARRAY_KEYS.includes(k)) localStorage.setItem(k,'[]');
-          else if(k==='sp_settings'){/* keep local */}
-          else localStorage.removeItem(k);
-        }
-      });
-    }
+    // ── ALWAYS update localStorage from Firebase (single source of truth) ──
+    ALL_KEYS.forEach(k=>{
+      if(!data){
+        // No data in Firebase at all — clear arrays, keep settings
+        if(ARRAY_KEYS.includes(k)) localStorage.setItem(k,'[]');
+        return;
+      }
+      const v = data[k];
+      if(v != null){
+        // Firebase has data — overwrite localStorage completely
+        localStorage.setItem(k, typeof v==='string' ? v : JSON.stringify(v));
+      } else {
+        // null = empty array stored (Firebase removes empty nodes)
+        if(ARRAY_KEYS.includes(k)) localStorage.setItem(k,'[]');
+        else if(k!=='sp_settings') localStorage.removeItem(k);
+      }
+    });
 
     if(firstLoad){
-      // First load — boot the app
       firstLoad = false;
       FB_READY = true;
       callback();
     } else {
-      // Subsequent updates — data changed on another device, refresh UI
-      console.log('🔄 Real-time sync received');
+      // Data changed on another device — refresh current page
+      console.log('🔄 Syncing from Firebase...');
       refreshUI();
+      // Flash sync dot yellow → green
+      const dot=document.getElementById('fbDot');
+      if(dot){
+        dot.style.background='#f59e0b';
+        dot.title='Syncing...';
+        setTimeout(()=>{dot.style.background='#34d399';dot.title='Firebase synced';},1500);
+      }
     }
   }, e=>{
     console.warn('FB listener error:',e);
@@ -74,28 +87,22 @@ function detachRealtimeListener(){
   if(_realtimeRef){ _realtimeRef.off(); _realtimeRef=null; }
 }
 
-// Refresh all currently visible UI without full reload
+// Refresh whichever page is currently visible
 function refreshUI(){
   try{
-    const pg = document.querySelector('.pg.on');
+    const pg=document.querySelector('.pg.on');
     if(!pg) return;
-    const id = pg.id;
-    if(id==='pg-dash')   renderDash();
+    const id=pg.id;
+    if(id==='pg-dash')        renderDash();
     else if(id==='pg-stu')    renderStu();
     else if(id==='pg-batch')  renderBatches();
     else if(id==='pg-sch')    renderSchContent();
     else if(id==='pg-rep')    renderRep();
     else if(id==='pg-alerts') renderAlerts();
     else if(id==='pg-set')    renderSettings();
-    else if(id==='pg-det' && window.detId) renderDet(window.detId);
-    updateBell();
-    // Show subtle sync indicator
-    const dot = document.getElementById('fbDot');
-    if(dot){
-      dot.style.background='#f59e0b';
-      setTimeout(()=>dot.style.background='#34d399', 1000);
-    }
-  }catch(e){ console.warn('refreshUI error:',e); }
+    else if(id==='pg-det'&&window.detId) renderDet(window.detId);
+    if(typeof updateBell==='function') updateBell();
+  }catch(e){ console.warn('refreshUI:',e); }
 }
 
 function signInEmail(){
