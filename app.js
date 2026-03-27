@@ -323,6 +323,7 @@ function renderDash(){
       </div>`).join('');
   }
   renderAvailCard();
+  renderNextClassBanner();
   updateBell();
 }
 
@@ -1305,7 +1306,13 @@ function saveStu(){
     const i=stus.findIndex(s=>s.id===editId);
     obj.prev_due=stus[i].prev_due||0;
     stus[i]={...stus[i],...obj};
-    DB.ss(stus);toast('Updated ✓','ok');goDetail(editId);
+    DB.ss(stus);
+    // Re-schedule if days/time changed
+    if(obj.class_days&&obj.class_time){
+      removeAutoScheduledClasses(editId);
+      setTimeout(()=>autoScheduleClasses(stus[i]),300);
+    }
+    toast('Updated ✓','ok');goDetail(editId);
   } else {
     obj.id=DB.nid(stus);stus.push(obj);DB.ss(stus);
     if(advAmt>0){
@@ -1314,20 +1321,178 @@ function saveStu(){
         mode:'Cash',note:'Initial advance',month:curM(),year:curY(),date:new Date().toLocaleDateString('en-IN')});
       DB.sp(pays);
     }
+    // Auto-schedule classes for new student
+    if(obj.class_days&&obj.class_time){
+      setTimeout(()=>autoScheduleClasses(obj),300);
+    }
     toast('Student added ✓','ok');nav('stu');
   }
 }
 
 // ══════════════════════════════════════════════════
-//  DELETE
+//  AUTO SCHEDULE
 // ══════════════════════════════════════════════════
+
+// Map day names to JS getDay() numbers
+const DAY_MAP={
+  'Sun':0,'Sunday':0,
+  'Mon':1,'Monday':1,
+  'Tue':2,'Tuesday':2,
+  'Wed':3,'Wednesday':3,
+  'Thu':4,'Thursday':4,
+  'Fri':5,'Friday':5,
+  'Sat':6,'Saturday':6
+};
+
+function autoScheduleClasses(stu, daysAhead=60){
+  if(!stu.class_days||!stu.class_time) return; // nothing to schedule
+
+  const days=stu.class_days.split(',').map(d=>d.trim());
+  const isDaily=days.some(d=>d.toLowerCase()==='daily');
+
+  // Build list of target weekday numbers
+  let targetDays=[];
+  if(isDaily){
+    targetDays=[0,1,2,3,4,5,6];
+  } else {
+    days.forEach(d=>{
+      const n=DAY_MAP[d];
+      if(n!==undefined) targetDays.push(n);
+    });
+  }
+  if(!targetDays.length) return;
+
+  const existingCls=DB.gc();
+  // Get dates already scheduled for this student
+  const existingDates=new Set(
+    existingCls.filter(c=>c.student_id===stu.id).map(c=>c.date)
+  );
+
+  const newCls=[...existingCls];
+  const today=new Date(); today.setHours(0,0,0,0);
+
+  let added=0;
+  for(let i=0;i<daysAhead;i++){
+    const d=new Date(today);
+    d.setDate(today.getDate()+i);
+    if(targetDays.includes(d.getDay())){
+      const ds=d.toISOString().split('T')[0];
+      if(!existingDates.has(ds)){
+        newCls.push({
+          id:DB.nid(newCls)+added,
+          student_id:stu.id,
+          batch_id:null,
+          date:ds,
+          time:stu.class_time,
+          duration:stu.class_duration||'45',
+          type:stu.class_type||'online',
+          meet_link:stu.meet_link||'',
+          topic:'',
+          attended:null,
+          batch_att:{},
+          auto:true // flag so we know it was auto-generated
+        });
+        added++;
+      }
+    }
+  }
+  if(added>0){
+    DB.sc(newCls);
+    toast(`📅 ${added} classes auto-scheduled for ${stu.student_name}`,'ok');
+  }
+}
+
+function removeAutoScheduledClasses(stuId){
+  // Remove future auto-scheduled classes for this student (keep past attended ones)
+  const today=todayStr();
+  const filtered=DB.gc().filter(c=>
+    !(c.student_id===stuId && c.auto===true && c.date>=today && c.attended===null)
+  );
+  DB.sc(filtered);
+}
+
+// ══════════════════════════════════════════════════
+//  NEXT CLASS BANNER
+// ══════════════════════════════════════════════════
+let _nextClassTimer=null;
+
+function renderNextClassBanner(){
+  const el=document.getElementById('nextClassBanner');
+  if(!el) return;
+
+  const now=new Date();
+  const todayDate=todayStr();
+  const stus=DB.gs().filter(s=>s.active);
+  const cfg=getSettings();
+
+  // Get all classes today, sorted by time
+  const todayCls=DB.gc()
+    .filter(c=>c.date===todayDate&&c.attended===null)
+    .sort((a,b)=>a.time>b.time?1:-1);
+
+  if(!todayCls.length){el.innerHTML='';return;}
+
+  // Find the next upcoming class
+  const nowMins=now.getHours()*60+now.getMinutes();
+  let nextCls=null;
+  for(const c of todayCls){
+    const[h,m]=c.time.split(':');
+    const clsMins=+h*60+ +m;
+    if(clsMins>nowMins){nextCls={...c,clsMins};break;}
+  }
+
+  if(!nextCls){el.innerHTML='';return;}
+
+  const diffMins=nextCls.clsMins-nowMins;
+  const s=stus.find(x=>x.id===nextCls.student_id);
+  const b=nextCls.batch_id?DB.gb().find(x=>x.id===nextCls.batch_id):null;
+  const label=b?b.name:s?s.student_name:'Class';
+  const meetLink=nextCls.meet_link||(s?.meet_link||'');
+
+  // Only show banner if class is within 60 mins
+  if(diffMins>60){el.innerHTML='';return;}
+
+  const isUrgent=diffMins<=30;
+  const timeStr=diffMins===0?'Starting now!':
+                diffMins===1?'In 1 minute':
+                `In ${diffMins} minutes`;
+
+  el.innerHTML=`<div style="margin:0 14px 10px;padding:12px 14px;
+    background:${isUrgent?'linear-gradient(135deg,var(--acc)22,var(--acc)10)':'var(--surf)'};
+    border:1.5px solid ${isUrgent?'var(--acc)':'var(--bdr)'};
+    border-radius:14px;display:flex;align-items:center;gap:12px;
+    ${isUrgent?'animation:pulse 2s infinite;':''}"
+  >
+    <div style="font-size:28px;flex-shrink:0">${isUrgent?'⏰':'📅'}</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;font-weight:800;color:${isUrgent?'var(--acc)':'var(--txt)'};">
+        ${timeStr} — ${esc(label)}
+      </div>
+      <div style="font-size:11px;color:var(--txt3);margin-top:2px;">
+        ${fmt12(nextCls.time)} · ${nextCls.duration||45}min · ${nextCls.type==='online'?'🌐 Online':'📍 Offline'}
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;">
+      ${meetLink&&nextCls.type==='online'?`<button class="tc-btn meet" onclick="openMeet('${esc(meetLink)}')">🎥 Join</button>`:''}
+      ${s?`<a href="tel:${esc(s.mobile_number)}" class="tc-btn" style="border-color:var(--grn)44;color:var(--grn);text-decoration:none">📞</a>`:''}
+    </div>
+  </div>`;
+
+  // Auto-refresh every minute so countdown updates
+  clearTimeout(_nextClassTimer);
+  _nextClassTimer=setTimeout(()=>{
+    if(document.getElementById('pg-dash')?.classList.contains('on')) renderNextClassBanner();
+  },60000);
+}
+
+
 function confirmDel(id){
   const s=DB.gs().find(x=>x.id===id);if(!s)return;
   document.getElementById('delMsg').textContent=`Delete "${s.student_name}"? All records will be removed.`;
   document.getElementById('delConfirmBtn').onclick=()=>{
     DB.ss(DB.gs().filter(s=>s.id!==id));
     DB.sp(DB.gp().filter(p=>p.student_id!==id));
-    DB.sc(DB.gc().filter(c=>c.student_id!==id));
+    DB.sc(DB.gc().filter(c=>c.student_id!==id)); // removes all classes including auto
     DB.sh(DB.gh().filter(h=>h.student_id!==id));
     DB.spr(DB.gpr().filter(p=>p.student_id!==id));
     closeOv('delOv');toast('Deleted');nav('stu');
@@ -1468,7 +1633,7 @@ if(DB.gs().length===0){
     {id:1,student_id:1,text:'Practise Yaman Alaap 15 minutes daily. Focus on slow meend on Ga note.',due_date:todayStr(),created:'15/03/2025',done:false},
     {id:2,student_id:2,text:'Sa Re Ga Ma Pa Dha Ni — all 3 octaves without break. 20 repetitions.',due_date:'',created:'14/03/2025',done:true},
   ]);
-  saveSettingsObj({...SET_DEFAULT,teacher:'Ravi Sir',inst:'Swar Sangam Academy',curr:'₹'});
+  saveSettingsObj({...SET_DEFAULT,teacher:'Ravi Sir',inst:'Sai Spandana College of Music, Bangalore',curr:'₹'});
 }
 
 // ══════════════════════════════════════════════════
@@ -2079,9 +2244,7 @@ function bootApp(){
   loadSavedTheme();
   renderDash();
   updateBell();
-  // Show Namaste greeting
-  document.getElementById('namasteTeacher').textContent=
-    cfg0.teacher ? cfg0.teacher : cfg0.inst ? cfg0.inst : '';
+  // Show Namaste greeting — no teacher name, just Namaste Guru Ji
   setTimeout(closeNameste, 3000);
   // Show sync status
   const dot=document.getElementById('fbDot');
